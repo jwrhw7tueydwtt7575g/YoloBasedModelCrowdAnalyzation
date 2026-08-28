@@ -92,7 +92,7 @@ def _create_detector(model_size: str = "n") -> Detector:
         return OpenCVContourDetector()
 
 
-def _create_tracker(tracker_type: str = "botsort", fps: int = 24) -> Tracker:
+def _create_tracker(tracker_type: str = "bytetrack", fps: int = 24) -> Tracker:
     try:
         from mctracker.tracker import make_tracker
         return make_tracker(tracker_type, frame_rate=fps, with_reid=False)
@@ -122,8 +122,9 @@ async def process_video(
 
     if file:
         file_path = UPLOAD_DIR / f"{stream_id}_{file.filename}"
+        content = await file.read()
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(content)
         video_source = str(file_path)
     else:
         video_source = source_url
@@ -156,7 +157,7 @@ async def process_video(
 
     annotator = FrameAnnotator()
     detector = _create_detector("n")
-    tracker = _create_tracker("botsort", fps=int(fps))
+    tracker = _create_tracker("bytetrack", fps=int(fps))
     zone_mgr = ZoneManager(zones=[zn])
     tripwire_mgr = TripwireManager(stream_id=stream_id, tripwires=[tw])
 
