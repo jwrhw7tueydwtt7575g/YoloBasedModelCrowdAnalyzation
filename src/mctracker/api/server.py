@@ -97,9 +97,9 @@ def _create_tracker(tracker_type: str = "botsort", fps: int = 24) -> Tracker:
         from mctracker.tracker import make_tracker
         return make_tracker(tracker_type, frame_rate=fps, with_reid=False)
     except Exception as e:
-        log.warning(f"make_tracker unavailable ({e}); using FakeTracker fallback.")
-        from mctracker.tracker import FakeTracker
-        return FakeTracker(inner=None)
+        log.warning(f"make_tracker unavailable ({e}); using PureIOUTracker fallback.")
+        from mctracker.tracker import PureIOUTracker
+        return PureIOUTracker(max_age=30, iou_threshold=0.20)
 
 
 class ProcessVideoRequest(BaseModel):

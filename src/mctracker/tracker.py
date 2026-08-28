@@ -283,6 +283,100 @@ class FakeTracker(Tracker):
 
 
 # ---------------------------------------------------------------------------
+# Pure-Python IOU Tracker (Fallback when boxmot is not installed)
+# ---------------------------------------------------------------------------
+
+
+class PureIOUTracker(Tracker):
+    """Pure-Python IOU bounding-box tracker fallback.
+
+    Associates detections across consecutive frames using Intersection-Over-Union (IOU)
+    overlapping and maintains persistent Track IDs across motion gaps up to max_age.
+    """
+
+    def __init__(self, max_age: int = 30, iou_threshold: float = 0.20) -> None:
+        import time
+        self._time = time
+        self._max_age = max_age
+        self._iou_threshold = iou_threshold
+        self._next_id = 1
+        self._tracks: dict[int, dict] = {}
+
+    def update(self, frame: Frame, detections: List[Detection]) -> List[TrackState]:
+        now_ts = self._time.time()
+
+        for tid in list(self._tracks.keys()):
+            self._tracks[tid]["age"] += 1
+            if self._tracks[tid]["age"] > self._max_age:
+                del self._tracks[tid]
+
+        unmatched_dets = list(range(len(detections)))
+        matched_tracks = set()
+
+        for det_idx in list(unmatched_dets):
+            det = detections[det_idx]
+            best_iou = 0.0
+            best_tid = None
+            d_box = det.xyxy
+            d_area = (d_box[2] - d_box[0]) * (d_box[3] - d_box[1])
+
+            for tid, trk in self._tracks.items():
+                if tid in matched_tracks:
+                    continue
+                t_box = trk["xyxy"]
+                t_area = (t_box[2] - t_box[0]) * (t_box[3] - t_box[1])
+
+                ix1, iy1 = max(t_box[0], d_box[0]), max(t_box[1], d_box[1])
+                ix2, iy2 = min(t_box[2], d_box[2]), min(t_box[3], d_box[3])
+                iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+                inter = iw * ih
+                union = t_area + d_area - inter
+                iou = inter / float(union + 1e-6)
+
+                if iou > self._iou_threshold and iou > best_iou:
+                    best_iou = iou
+                    best_tid = tid
+
+            if best_tid is not None:
+                self._tracks[best_tid]["xyxy"] = det.xyxy
+                self._tracks[best_tid]["conf"] = det.conf
+                self._tracks[best_tid]["cls"] = det.cls
+                self._tracks[best_tid]["age"] = 0
+                matched_tracks.add(best_tid)
+                unmatched_dets.remove(det_idx)
+
+        for det_idx in unmatched_dets:
+            det = detections[det_idx]
+            tid = self._next_id
+            self._next_id += 1
+            self._tracks[tid] = {"xyxy": det.xyxy, "conf": det.conf, "cls": det.cls, "age": 0}
+            matched_tracks.add(tid)
+
+        output_states: List[TrackState] = []
+        for tid in matched_tracks:
+            trk = self._tracks[tid]
+            if trk["age"] == 0:
+                output_states.append(
+                    make_track_state(
+                        track_id=tid,
+                        bbox_xyxy=(float(trk["xyxy"][0]), float(trk["xyxy"][1]), float(trk["xyxy"][2]), float(trk["xyxy"][3])),
+                        conf=float(trk["conf"]),
+                        cls=int(trk["cls"]),
+                        ts=now_ts,
+                    )
+                )
+        return output_states
+
+    def reset(self) -> None:
+        self._tracks.clear()
+        self._next_id = 1
+
+    @property
+    def active_track_ids(self) -> set[int]:
+        return {tid for tid, trk in self._tracks.items() if trk["age"] == 0}
+
+
+# ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 
@@ -298,8 +392,12 @@ def make_tracker(tracker_type: str, frame_rate: int = 30, with_reid: bool = Fals
     ``with_reid`` is ignored for ByteTrack (no appearance).
     """
     t = tracker_type.lower().strip()
-    if t == "bytetrack":
-        return ByteTrackTracker(frame_rate=frame_rate)
-    if t == "botsort":
-        return BoTSORTTracker(frame_rate=frame_rate, with_reid=with_reid)
+    try:
+        if t == "bytetrack":
+            return ByteTrackTracker(frame_rate=frame_rate)
+        if t == "botsort":
+            return BoTSORTTracker(frame_rate=frame_rate, with_reid=with_reid)
+    except Exception as e:
+        log.warning(f"boxmot tracker creation failed ({e}); falling back to PureIOUTracker.")
+        return PureIOUTracker(max_age=30, iou_threshold=0.20)
     raise ValueError(f"unknown tracker_type: {tracker_type!r}")
