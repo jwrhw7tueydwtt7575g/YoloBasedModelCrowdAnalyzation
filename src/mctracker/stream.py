@@ -31,6 +31,7 @@ high-density repository + evidence recorder.
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
 import time
@@ -262,7 +263,17 @@ class Stream:
 
             displayed = [t for t in tracks if t.confidence >= self._display_conf]
             try:
-                self._on_results(self.id, displayed, zone_counts, new_crossings)
+                sig = inspect.signature(self._on_results)
+                params = list(sig.parameters.values())
+                # Check if callback accepts 5 positional arguments or varargs (*args)
+                has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+                if len(params) >= 5 and not has_varargs:
+                    self._on_results(self.id, frame, displayed, zone_counts, new_crossings)
+                elif has_varargs and len(params) > 1:
+                    # Varargs like lambda sid, tracks, *args in legacy tests expect 4 positionals
+                    self._on_results(self.id, displayed, zone_counts, new_crossings)
+                else:
+                    self._on_results(self.id, displayed, zone_counts, new_crossings)
             except Exception:  # pragma: no cover - callback author responsibility
                 log.exception(
                     "on_results callback raised for stream %s",

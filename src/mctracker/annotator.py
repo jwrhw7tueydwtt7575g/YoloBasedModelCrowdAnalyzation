@@ -62,8 +62,8 @@ class FrameAnnotator:
                 # Zone label at centroid of polygon
                 M = cv2.moments(pts)
                 if M["m00"] != 0:
-                    cx = int(M["10"] / M["m00"])
-                    cy = int(M["01"] / M["m00"])
+                    cx = int(M["m10"] / M["m00"])
+                    cy = int(M["m01"] / M["m00"])
                     label = f"Zone: {zone.id} (Occupancy: {getattr(zone, 'count', 0)})"
                     (tw_w, tw_h), _ = cv2.getTextSize(label, self.font, 0.5, 1)
                     cv2.rectangle(out, (cx - 5, cy - tw_h - 5), (cx + tw_w + 5, cy + 5), (0, 0, 0), -1)

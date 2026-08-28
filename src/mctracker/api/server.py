@@ -190,7 +190,18 @@ async def process_video(
         log.warning(f"VideoWriter unavailable ({e}); disabling MP4 recording.")
     session["writer"] = writer
 
-    def on_results(sid: str, tracks, zones, crossings):
+    def on_results(sid: str, arg1, arg2, arg3, arg4=None):
+        if arg4 is not None:
+            raw_frame = arg1
+            tracks = arg2
+            zones = arg3
+            crossings = arg4
+        else:
+            raw_frame = None
+            tracks = arg1
+            zones = arg2
+            crossings = arg3
+
         session["processed_frames"] += 1
         for t in tracks:
             session["tracks_seen"].add(t.track_id)
@@ -224,24 +235,26 @@ async def process_video(
                         "clip_url": None,
                     })
 
-        # Retrieve current frame buffer for rendering
-        if stream._buffer and len(stream._buffer) > 0:
+        # Retrieve current frame buffer for rendering fallback if raw_frame wasn't passed directly
+        if raw_frame is None and stream._buffer and len(stream._buffer) > 0:
             latest = stream._buffer.peek_latest()
             if latest is not None:
-                raw_frame, ts = latest
-                ann_frame = annotator.annotate(
-                    raw_frame,
-                    tracks=tracks,
-                    zones=session.get("zones", []),
-                    tripwires=session.get("tripwires", []),
-                    recent_crossings=crossings,
-                )
-                session["annotated_frame"] = ann_frame
-                if writer is not None and writer.isOpened():
-                    try:
-                        writer.write(ann_frame)
-                    except Exception:
-                        pass
+                raw_frame = latest[0]
+
+        if raw_frame is not None:
+            ann_frame = annotator.annotate(
+                raw_frame,
+                tracks=tracks,
+                zones=session.get("zones", []),
+                tripwires=session.get("tripwires", []),
+                recent_crossings=crossings,
+            )
+            session["annotated_frame"] = ann_frame
+            if writer is not None and writer.isOpened():
+                try:
+                    writer.write(ann_frame)
+                except Exception:
+                    pass
 
     stream = Stream(
         stream_id=stream_id,
