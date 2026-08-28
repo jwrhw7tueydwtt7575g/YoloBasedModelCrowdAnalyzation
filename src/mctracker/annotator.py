@@ -47,7 +47,10 @@ class FrameAnnotator:
         if zones:
             overlay = out.copy()
             for zone in zones:
-                pts = np.array(zone.polygon, dtype=np.int32)
+                polygon = getattr(zone, "polygon", None)
+                if not polygon:
+                    continue
+                pts = np.array(polygon, dtype=np.int32)
                 is_occupied = getattr(zone, "count", 0) > 0
                 # Green for vacant zone, Red for occupied
                 fill_color = (0, 0, 200) if is_occupied else (0, 180, 0)

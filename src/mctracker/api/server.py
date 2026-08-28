@@ -226,13 +226,14 @@ async def process_video(
 
         # Retrieve current frame buffer for rendering
         if stream._buffer and len(stream._buffer) > 0:
-            raw_frame, ts = stream._buffer.get_latest(timeout=0.01)
-            if raw_frame is not None:
+            latest = stream._buffer.get_latest(timeout=0.01)
+            if latest is not None:
+                raw_frame, ts = latest
                 ann_frame = annotator.annotate(
                     raw_frame,
                     tracks=tracks,
-                    zones=list(zones.values()) if isinstance(zones, dict) else list(zones),
-                    tripwires=[tw],
+                    zones=session.get("zones", []),
+                    tripwires=session.get("tripwires", []),
                     recent_crossings=crossings,
                 )
                 session["annotated_frame"] = ann_frame
