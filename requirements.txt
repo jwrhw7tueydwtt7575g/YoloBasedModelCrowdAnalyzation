@@ -1,0 +1,7 @@
+# Lightweight runtime deps — enough to run the boxmot-free tests and import
+# the package. Heavy inference deps (ultralytics, boxmot, torch) live in
+# the ``[heavy]`` optional extra (see pyproject.toml).
+
+numpy>=1.24
+opencv-python-headless>=4.8
+pyyaml>=6.0

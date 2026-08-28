@@ -1,0 +1,102 @@
+# Sample multi-stream config for mctracker.
+#
+# Per-stream fields:
+#   id              - unique string identifier
+#   source          - RTSP URL, video file path, or webcam index (e.g. "0")
+#   model_size      - ultralytics YOLO model (yolov8n/s/m/l/x.pt). Will be
+#                     auto-downloaded on first run.
+#   tracker_type    - "bytetrack" (default) or "botsort"
+#   use_appearance  - true to enable ReID embeddings (BoT-SORT only)
+#   buffer_seconds  - ring buffer holds ~this many seconds of frames
+#   fps_fallback    - used if cv2 can't read the source's FPS
+#   display_conf    - conf threshold applied AFTER tracking, before callback
+#   centroid_mode   - "bottom_center" (default, for eye-level cameras) or
+#                     "geometric_center" (for near-overhead cameras). Used
+#                     by both zone occupancy and tripwire crossings.
+#   zones           - list of polygons (>=3 [x,y] points each)
+#   tripwires       - list of line segments. direction_in: which sign change
+#                     counts as "in" (default "left_to_right").
+#                     recycle_after_frames / recycle_distance_px control when
+#                     a track-id is treated as a fresh person again.
+
+streams:
+  - id: cam_lobby
+    source: rtsp://user:pass@10.0.0.10:554/stream1
+    model_size: yolov8n.pt
+    tracker_type: botsort
+    use_appearance: true
+    buffer_seconds: 5
+    fps_fallback: 30
+    display_conf: 0.25
+    centroid_mode: bottom_center
+    # Optional [width, height]. When present, tripwire endpoints are bounds-
+    # validated at config-load time. Omit if the source's frame size isn't
+    # known (RTSP that hasn't been probed yet).
+    frame_size: [1280, 720]
+    # Stage 6: high-density / crowd alert. Fires when the zone count stays
+    # above max_density_threshold for density_dwell_seconds, then silenced
+    # for density_cooldown_seconds. Set max_density_threshold to null to
+    # disable on a per-stream basis.
+    max_density_threshold: 8
+    density_dwell_seconds: 3.0
+    density_cooldown_seconds: 15.0
+    zones:
+      - id: seating_area
+        polygon:
+          - [100, 200]
+          - [400, 200]
+          - [400, 450]
+          - [100, 450]
+    tripwires:
+      - id: entrance
+        p1: [50, 180]
+        p2: [630, 180]
+        direction_in: left_to_right
+        recycle_after_frames: 60
+        recycle_distance_px: 200.0
+
+  - id: cam_overhead
+    source: /videos/overhead.mp4
+    model_size: yolov8s.pt
+    tracker_type: bytetrack
+    use_appearance: false
+    buffer_seconds: 5
+    fps_fallback: 30
+    display_conf: 0.25
+    centroid_mode: geometric_center
+    frame_size: [640, 480]
+    zones:
+      - id: queue_zone
+        polygon:
+          - [0, 0]
+          - [300, 0]
+          - [300, 480]
+          - [0, 480]
+
+# Stage 5: violations-layer configuration. ``window_seconds`` is the half-
+# window used to pair a crossing with a QR scan. Must be strictly > 0.
+violations:
+  window_seconds: 10.0
+
+# Stage 5: structured logging and metrics. The in-process counters are
+# always live; the Prometheus /metrics endpoint only opens if metrics_port
+# is > 0 AND the [prometheus] extra is installed.
+observability:
+  enabled: true
+  metrics_port: 0    # 0 = no HTTP server; set e.g. 9090 to expose /metrics
+
+# Optional evidence-clip recorder. Disabled by default. When enabled,
+# every persisted violation triggers an MP4 clip combining the
+# pre-event window (from the per-stream rolling ring buffer) and a
+# configurable post-event capture. See README.md → "Evidence clips".
+evidence:
+  enabled: true
+  base_dir: ./evidence_clips
+  pre_seconds: 5.0
+  post_seconds: 5.0
+  free_threshold_mb: 2048.0      # refuse writes below this free space
+  retention_days: 30.0            # delete clips older than N days
+  fps: 30.0
+  buffer_memory_ceiling_mb: 1024.0  # across ALL streams; warns + clips on overflow
+  clip_storage: local            # "local" | "noop"
+

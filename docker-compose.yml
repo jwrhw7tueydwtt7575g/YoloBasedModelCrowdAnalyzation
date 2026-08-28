@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  mctracker-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mctracker-api-service
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/src
+    volumes:
+      - /tmp/mctracker_uploads:/tmp/mctracker_uploads
+    restart: unless-stopped

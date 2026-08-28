@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mctracker"
+version = "0.1.0"
+description = "Multi-camera person tracking with YOLOv8 + swappable trackers (ByteTrack / BoT-SORT)."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python-headless>=4.8",
+    "pyyaml>=6.0",
+    "sortedcontainers>=2.4",
+    "sqlalchemy>=2.0",
+]
+
+[project.optional-dependencies]
+# Heavy inference deps — install only when you need a real YOLO/boxmot run.
+heavy = [
+    "ultralytics>=8.0",
+    "boxmot>=12.0",
+    "torch>=2.0",
+    "torchvision>=0.15",
+]
+# Webhook receiver (FastAPI). Not needed for tests.
+webhook = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+]
+postgres = [
+    "psycopg[binary]>=3.1",
+]
+sqlite = [
+    "sqlalchemy>=2.0",
+]
+# Structured JSON logging for production runs.
+obs = [
+    "python-json-logger>=2.0",
+]
+# Prometheus /metrics endpoint. In-process counters work without it.
+prometheus = [
+    "prometheus_client>=0.19",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "httpx>=0.27",
+    "python-json-logger>=2.0",
+]
+
+[project.scripts]
+mctracker = "mctracker.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
