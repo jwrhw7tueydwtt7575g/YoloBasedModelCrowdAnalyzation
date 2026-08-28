@@ -226,7 +226,7 @@ async def process_video(
 
         # Retrieve current frame buffer for rendering
         if stream._buffer and len(stream._buffer) > 0:
-            latest = stream._buffer.get_latest(timeout=0.01)
+            latest = stream._buffer.peek_latest()
             if latest is not None:
                 raw_frame, ts = latest
                 ann_frame = annotator.annotate(

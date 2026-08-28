@@ -117,6 +117,13 @@ class FrameBuffer:
             self._last_returned_ts = ts
             return frame, ts
 
+    def peek_latest(self) -> Optional[tuple[Frame, float]]:
+        """Return the most recent (frame, ts) in the buffer without modifying _last_returned_ts."""
+        with self._cond:
+            if not self._dq:
+                return None
+            return self._dq[-1]
+
     # ----- introspection -----
 
     def __len__(self) -> int:
