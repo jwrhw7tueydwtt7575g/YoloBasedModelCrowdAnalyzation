@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 
 from mctracker.annotator import FrameAnnotator
@@ -326,6 +326,46 @@ async def stream_mjpeg_feed(stream_id: str):
     )
 
 
+@app.get("/api/v1/streams/{stream_id}/snapshot")
+async def stream_snapshot(stream_id: str):
+    """Returns a single annotated JPEG frame for polling-based live display.
+
+    Preferred for cloud environments where reverse-proxies buffer MJPEG streams.
+    """
+    if stream_id not in ACTIVE_STREAMS:
+        raise HTTPException(status_code=404, detail="Stream session not found.")
+
+    session = ACTIVE_STREAMS[stream_id]
+    frame = session.get("annotated_frame")
+    if frame is None:
+        placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(
+            placeholder,
+            "Initializing stream...",
+            (180, 240),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (150, 150, 150),
+            2,
+            cv2.LINE_AA,
+        )
+        frame = placeholder
+
+    ret, jpeg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+    if not ret:
+        raise HTTPException(status_code=500, detail="Frame encoding failed.")
+
+    return Response(
+        content=jpeg.tobytes(),
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
 @app.get("/api/v1/streams/{stream_id}/report")
 async def get_stream_report(stream_id: str):
     """Generate and return a structured JSON analytics report."""
@@ -607,7 +647,8 @@ async def dashboard_ui():
                     const data = await res.json();
                     if (data.status === 'success') {
                         activeStreamId = data.stream_id;
-                        document.getElementById('videoWrapper').innerHTML = `<img src="/api/v1/streams/${activeStreamId}/feed" alt="Live Feed">`;
+                        document.getElementById('videoWrapper').innerHTML = `<img id="liveFeedImg" src="/api/v1/streams/${activeStreamId}/snapshot?t=${Date.now()}" alt="Live Feed" style="max-width:100%; height:auto; display:block;">`;
+                        startFramePolling();
                         startPollingStats();
                     } else {
                         alert('Error starting stream');
@@ -616,6 +657,18 @@ async def dashboard_ui():
                     alert('Failed to connect to API server');
                 }
             });
+
+            let frameTimer = null;
+            function startFramePolling() {
+                if (frameTimer) clearInterval(frameTimer);
+                frameTimer = setInterval(() => {
+                    if (!activeStreamId) return;
+                    const img = document.getElementById('liveFeedImg');
+                    if (img) {
+                        img.src = `/api/v1/streams/${activeStreamId}/snapshot?t=${Date.now()}`;
+                    }
+                }, 100);
+            }
 
             async function fetchReport() {
                 if (!activeStreamId) {
